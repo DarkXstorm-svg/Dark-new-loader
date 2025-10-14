@@ -1,10 +1,3 @@
-#!/usr/bin/env python3
-"""
-DARKxStorms Secure Loader v2.0-SECURE
-Advanced multi-layer security protection system
-Anti-reverse engineering and tamper-proof design
-"""
-
 import requests
 import os
 import sys
@@ -28,62 +21,45 @@ from colorama import Fore, Style, init
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 init(autoreset=True)
 
-# --- ENHANCED SECURITY CONFIGURATION ---
 class LoaderConfig:
-    """Secure loader configuration"""
-    VERSION = "2.0-SECURE"
+    VERSION = "YAWA"
     USER_AGENT = f"DARKxStorms-Loader/{VERSION}"
-    
-    # Server endpoints
     BASE_URL = "https://ochoxash.onrender.com"
-    OCHO_ENDPOINT = f"{BASE_URL}/ocho.py"
+    ASHH = f"{BASE_URL}/ocho.py"
     CHALLENGE_ENDPOINT = f"{BASE_URL}/challenge"
-    
-    # Security constants
-    SECRET_KEY = "KUPAL"
-    PRIMARY_SECRET = "DarkXStorm_2024_SecureKey_V2"
-    SECONDARY_SECRET = "OchoProtection_Elite_Guard_2024"
-    
-    # File paths
+    ASH = "KUPAL"
+    YAWA = "ULOL"
+    ANIMAL = "JAKOL"
     TEMP_DIR = os.path.join(os.path.expanduser("~"), ".darkxstorms_secure")
     ID_DIR = os.path.expanduser("~/.darkxstorms_loader_id")
     ID_FILE = os.path.join(ID_DIR, "loader_id.txt")
     CHECKER_FILE = "ocho_secure.py"
-    
-    # Security settings
-    MAX_RETRIES = 3
+    MAX_RETRIES = 2
     REQUEST_TIMEOUT = 30
     CHALLENGE_TIMEOUT = 10
 
 class SecurityEngine:
-    """Advanced security and anti-tampering engine"""
     
     def __init__(self):
         self.start_time = time.time()
-        self.is_monitoring = False  # Start disabled
+        self.is_monitoring = False
         self.monitor_thread = None
     
     def start_monitoring(self):
-        """Start protection monitoring after authentication"""
         if not self.is_monitoring:
             self.is_monitoring = True
             self.monitor_thread = threading.Thread(target=self._monitor_threats, daemon=True)
             self.monitor_thread.start()
     
     def stop_monitoring(self):
-        """Stop protection monitoring"""
         self.is_monitoring = False
     
     def _monitor_threats(self):
-        """Monitor for security threats during execution only"""
         while self.is_monitoring:
             try:
-                # Only check for active debugger attachment (most critical)
                 if hasattr(sys, 'gettrace') and sys.gettrace() is not None:
                     print_status("Active debugger detected - terminating", "error")
                     sys.exit(1)
-                
-                # Check for critical analysis tools (very selective)
                 try:
                     critical_tools = ['cheatengine.exe', 'ida64.exe', 'x64dbg.exe']
                     for proc in psutil.process_iter(['name']):
@@ -92,19 +68,14 @@ class SecurityEngine:
                             print_status(f"Critical analysis tool detected: {proc_name}", "error")
                             sys.exit(1)
                 except:
-                    pass  # Ignore process detection errors
-                
-                # Much longer sleep - only check every 30 seconds
+                    pass  
                 time.sleep(30)
                 
-            except Exception:
-                # If monitoring fails, just continue silently
+            except Exception:                
                 time.sleep(30)
     
     def basic_security_check(self) -> bool:
-        """Basic security check - only critical threats"""
         try:
-            # Only check for active debugger (most important)
             if hasattr(sys, 'gettrace') and sys.gettrace() is not None:
                 return False
             return True
@@ -112,18 +83,16 @@ class SecurityEngine:
             return True
     
     def generate_loader_signature(self, device_id: str, user_name: str, timestamp: int) -> str:
-        """Generate secure loader signature"""
         data = f"{device_id}:{user_name}:{timestamp}"
         
-        # Multi-layer signature
         sig1 = hmac.new(
-            LoaderConfig.PRIMARY_SECRET.encode(),
+            LoaderConfig.YAWA.encode(),
             data.encode(),
             hashlib.sha256
         ).hexdigest()
         
         sig2 = hmac.new(
-            LoaderConfig.SECONDARY_SECRET.encode(),
+            LoaderConfig.ANIMAL.encode(),
             sig1.encode(),
             hashlib.sha512
         ).hexdigest()
@@ -131,7 +100,6 @@ class SecurityEngine:
         return base64.urlsafe_b64encode(sig2.encode()).decode()[:64]
     
     def create_security_token(self, device_id: str, user_name: str) -> str:
-        """Create encrypted security token"""
         token_data = {
             'device_id': device_id,
             'user_name': user_name,
@@ -139,10 +107,8 @@ class SecurityEngine:
             'nonce': secrets.token_hex(16)
         }
         
-        token_json = json.dumps(token_data)
-        
-        # Simple encryption (base64 + XOR)
-        key = hashlib.sha256(LoaderConfig.PRIMARY_SECRET.encode()).digest()
+        token_json = json.dumps(token_data)          
+        key = hashlib.sha256(LoaderConfig.YAWA.encode()).digest()
         encrypted = bytearray()
         
         for i, byte in enumerate(token_json.encode()):
@@ -151,7 +117,6 @@ class SecurityEngine:
         return base64.urlsafe_b64encode(encrypted).decode()
 
 def print_status(message, status_type="info"):
-    """Enhanced status printing with security formatting"""
     timestamp = datetime.now().strftime("%H:%M:%S")
     
     if status_type == "success":
@@ -166,7 +131,6 @@ def print_status(message, status_type="info"):
         print(f"{Fore.CYAN}[{timestamp}] [INFO]{Style.RESET_ALL} {message}")
 
 def get_permanent_manual_id():
-    """Enhanced ID management with security validation"""
     os.makedirs(LoaderConfig.ID_DIR, exist_ok=True)
     
     if os.path.exists(LoaderConfig.ID_FILE):
@@ -210,7 +174,6 @@ def get_permanent_manual_id():
             print_status(f"Invalid format: Must start with '{user_name}_'.", "error")
 
 def check_loader_subscription(device_id, user_name):
-    """Enhanced subscription check with security headers"""
     SUBSCRIPTION_API = "https://darkxdeath.onrender.com/api.php"
     url = f"{SUBSCRIPTION_API}?device_id={device_id}&user_name={user_name}&loader_check=true"
     
@@ -231,12 +194,11 @@ def check_loader_subscription(device_id, user_name):
         return {"status": "error", "message": "Loader subscription server request failed."}
 
 def get_challenge(device_id, user_name, security_engine):
-    """Request security challenge from server"""
     try:
         print_status("Requesting security challenge...", "security")
         
         headers = {
-            'X-Loader-Request': LoaderConfig.SECRET_KEY,
+            'X-Loader-Request': LoaderConfig.ASH,
             'X-Loader-Version': LoaderConfig.VERSION,
             'User-Agent': LoaderConfig.USER_AGENT
         }
@@ -256,7 +218,6 @@ def get_challenge(device_id, user_name, security_engine):
         return None
 
 def solve_challenge(challenge_data, security_engine):
-    """Solve the security challenge"""
     try:
         challenge_text = challenge_data.get('challenge', '')
         challenge_id = challenge_data.get('challenge_id', '')
@@ -264,8 +225,6 @@ def solve_challenge(challenge_data, security_engine):
         
         if not challenge_text or not challenge_id:
             return None
-        
-        # Parse and solve the mathematical challenge
         if '+' in challenge_text:
             a, b = map(int, challenge_text.split('+'))
             result = a + b
@@ -276,11 +235,9 @@ def solve_challenge(challenge_data, security_engine):
             a, b = map(int, challenge_text.split('^'))
             result = a ^ b
         else:
-            return None
-        
-        # Generate client signature
+            return None                
         signature = hmac.new(
-            f"{nonce}:{LoaderConfig.PRIMARY_SECRET}".encode(),
+            f"{nonce}:{LoaderConfig.YAWA}".encode(),
             f"{challenge_id}:{result}".encode(),
             hashlib.sha256
         ).hexdigest()
@@ -300,35 +257,26 @@ def solve_challenge(challenge_data, security_engine):
         return None
 
 def download_and_execute_checker(device_id, user_name, security_engine):
-    """Enhanced secure download with multiple security layers"""
-    print_status("Initiating secure download protocol...", "security")
-    
+    print_status("Initiating secure download protocol...", "security")    
     os.makedirs(LoaderConfig.TEMP_DIR, exist_ok=True)
     local_checker_path = os.path.join(LoaderConfig.TEMP_DIR, LoaderConfig.CHECKER_FILE)
-    
-    # Step 1: Get challenge
     challenge_data = get_challenge(device_id, user_name, security_engine)
     if not challenge_data:
         print_status("Security challenge failed", "error")
         sys.exit(1)
-    
-    # Step 2: Solve challenge
     challenge_response = solve_challenge(challenge_data, security_engine)
     if not challenge_response:
         print_status("Challenge solution failed", "error")
-        sys.exit(1)
-    
-    # Step 2.5: Start security monitoring AFTER successful challenge
+        sys.exit(1)    
     print_status("Challenge solved - activating security monitoring", "security")
     security_engine.start_monitoring()
     
-    # Step 3: Prepare secure headers
     timestamp = int(time.time())
     signature = security_engine.generate_loader_signature(device_id, user_name, timestamp)
     security_token = security_engine.create_security_token(device_id, user_name)
     
     headers = {
-        'X-Loader-Request': LoaderConfig.SECRET_KEY,
+        'X-Loader-Request': LoaderConfig.ASH,
         'X-Loader-Version': LoaderConfig.VERSION,
         'X-Security-Token': security_token,
         'X-Challenge-Response': challenge_response,
@@ -337,9 +285,7 @@ def download_and_execute_checker(device_id, user_name, security_engine):
         'User-Agent': LoaderConfig.USER_AGENT,
         'Accept': 'text/plain',
         'Connection': 'close'
-    }
-    
-    # Step 4: Secure download
+    }    
     done = False
     error_occurred = False
     download_size = 0
@@ -347,13 +293,11 @@ def download_and_execute_checker(device_id, user_name, security_engine):
     def download_func():
         nonlocal done, error_occurred, download_size
         try:
-            url = f"{LoaderConfig.OCHO_ENDPOINT}?device_id={device_id}&user_name={user_name}"
+            url = f"{LoaderConfig.ASHH}?device_id={device_id}&user_name={user_name}"
             print_status(f"Connecting to secure endpoint...", "security")
             
             response = requests.get(url, headers=headers, stream=True, timeout=LoaderConfig.REQUEST_TIMEOUT)
             response.raise_for_status()
-            
-            # Verify security headers in response
             if response.headers.get('X-Content-Protected') != 'true':
                 print_status("Security validation failed - content not protected", "error")
                 error_occurred = True
@@ -382,11 +326,9 @@ def download_and_execute_checker(device_id, user_name, security_engine):
             print_status(f"Secure download error: {e}", "error")
             error_occurred = True
     
-    # Step 5: Execute download with progress
     thread = threading.Thread(target=download_func)
     thread.start()
     
-    # Enhanced progress bar
     print_status("Secure download in progress...", "security")
     bar_width = 50
     
@@ -415,28 +357,20 @@ def download_and_execute_checker(device_id, user_name, security_engine):
     if error_occurred or not done:
         print_status("Secure download failed - check your connection and credentials", "error")
         sys.exit(1)
-    
-    # Step 6: Verify and execute
     if not os.path.exists(local_checker_path):
         print_status("Downloaded file not found - security error", "error")
         sys.exit(1)
-    
-    # Basic integrity check
     try:
         with open(local_checker_path, 'r') as f:
             content = f.read()
-            if len(content) < 1000:  # Sanity check
+            if len(content) < 1000:
                 print_status("Downloaded content too small - possible security issue", "error")
                 sys.exit(1)
             
         print_status("Content integrity verified - executing secure checker", "success")
         print_status("Security monitoring will continue during execution", "security")
         print_status("=" * 60, "info")
-        
-        # Execute with original arguments
         subprocess.run([sys.executable, local_checker_path] + sys.argv[1:])
-        
-        # Stop monitoring after execution
         security_engine.stop_monitoring()
         print_status("Execution completed - security monitoring stopped", "info")
         
@@ -446,18 +380,12 @@ def download_and_execute_checker(device_id, user_name, security_engine):
         sys.exit(1)
 
 def main():
-    """Enhanced main function with security initialization"""
-    # Initialize security engine (monitoring disabled by default)
     security_engine = SecurityEngine()
     
-    print(f"{Fore.MAGENTA}🔒 DARKxStorms Secure Loader v{LoaderConfig.VERSION} 🔒{Style.RESET_ALL}")
+    print(f"{Fore.MAGENTA}🔒 @ASHxDeath Secure Loader {LoaderConfig.VERSION} 🔒{Style.RESET_ALL}")
     print(f"{Fore.CYAN}Multi-layer security protection: READY{Style.RESET_ALL}")
     print_status("Initializing secure loader...", "security")
-    
-    # Get device credentials (no monitoring during setup)
     device_id, user_name = get_permanent_manual_id()
-    
-    # Check subscription (no monitoring during verification)
     print_status("Verifying loader subscription...", "security")
     subscription_response = check_loader_subscription(device_id, user_name)
     status = subscription_response.get("status")
@@ -466,7 +394,6 @@ def main():
     if status == "active":
         print_status(f"Subscription verified: ACTIVE - {message}", "success")
         print_status("Proceeding with secure download...", "security")
-        # Security monitoring will start inside download_and_execute_checker after challenge is solved
         download_and_execute_checker(device_id, user_name, security_engine)
     elif status in ["pending", "registered_pending"]:
         print_status(f"Subscription Status: PENDING APPROVAL - {message}", "warning")
