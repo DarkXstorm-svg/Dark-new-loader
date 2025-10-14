@@ -21,6 +21,13 @@ from colorama import Fore, Style, init
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 init(autoreset=True)
 
+# Optional advanced security utils (signature/challenge)
+try:
+    from security_utils import signature_validator
+    SIGNATURE_VALIDATOR_AVAILABLE = True
+except Exception:
+    SIGNATURE_VALIDATOR_AVAILABLE = False
+
 class LoaderConfig:
     VERSION = "YAWA"
     USER_AGENT = f"DARKxStorms-Loader/{VERSION}"
@@ -87,19 +94,23 @@ class SecurityEngine:
     
     def generate_loader_signature(self, device_id: str, user_name: str, timestamp: int) -> str:
         data = f"{device_id}:{user_name}:{timestamp}"
-        
+        try:
+            if SIGNATURE_VALIDATOR_AVAILABLE:
+                # Use advanced signature scheme from security_utils for consistency
+                return signature_validator.generate_loader_signature(device_id, user_name, timestamp)
+        except Exception:
+            pass
+        # Fallback to existing dual-HMAC scheme
         sig1 = hmac.new(
             LoaderConfig.YAWA.encode(),
             data.encode(),
             hashlib.sha256
         ).hexdigest()
-        
         sig2 = hmac.new(
             LoaderConfig.ANIMAL.encode(),
             sig1.encode(),
             hashlib.sha512
         ).hexdigest()
-        
         return base64.urlsafe_b64encode(sig2.encode()).decode()[:64]
     
     def create_security_token(self, device_id: str, user_name: str) -> str:
@@ -132,6 +143,66 @@ def print_status(message, status_type="info"):
         print(f"{Fore.MAGENTA}[{timestamp}] [SECURITY]{Style.RESET_ALL} {message}")
     else:
         print(f"{Fore.CYAN}[{timestamp}] [INFO]{Style.RESET_ALL} {message}")
+
+# Integrity helpers
+def get_file_hash(path: str) -> str:
+    try:
+        h = hashlib.sha256()
+        with open(path, "rb") as f:
+            for chunk in iter(lambda: f.read(8192), b""):
+                h.update(chunk)
+        return h.hexdigest()
+    except Exception:
+        return ""
+
+def _integrity_store_path():
+    os.makedirs(LoaderConfig.ID_DIR, exist_ok=True)
+    return os.path.join(LoaderConfig.ID_DIR, "integrity.json")
+
+def load_integrity_store() -> dict:
+    try:
+        with open(_integrity_store_path(), "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return {}
+
+def save_integrity_store(data: dict):
+    try:
+        with open(_integrity_store_path(), "w", encoding="utf-8") as f:
+            json.dump(data, f)
+    except Exception:
+        pass
+
+def ensure_integrity_baseline():
+    store = load_integrity_store()
+    updated = False
+    for path in (LoaderConfig.LOCAL_OLD_PATH, LoaderConfig.LOCAL_OCHO_PATH):
+        if os.path.exists(path):
+            h = get_file_hash(path)
+            if store.get(path) != h:
+                store[path] = h
+                updated = True
+    if updated:
+        save_integrity_store(store)
+        print_status("Integrity baseline updated", "security")
+    elif store:
+        print_status("Integrity baseline loaded", "security")
+
+def verify_local_integrity(path: str) -> bool:
+    store = load_integrity_store()
+    if not store:
+        ensure_integrity_baseline()
+        store = load_integrity_store()
+    current = get_file_hash(path)
+    baseline = store.get(path)
+    if not baseline:
+        print_status(f"No baseline for {path} - establishing now", "warning")
+        ensure_integrity_baseline()
+        return True
+    if current != baseline:
+        print_status(f"Integrity mismatch for {path}", "error")
+        return False
+    return True
 
 def get_permanent_manual_id():
     os.makedirs(LoaderConfig.ID_DIR, exist_ok=True)
@@ -259,7 +330,41 @@ def solve_challenge(challenge_data, security_engine):
         print_status(f"Challenge solve failed: {e}", "error")
         return None
 
-def download_and_execute_checker(device_id, user_name, security_engine):
+def _build_protected_wrapper(original_code: str) -> str:
+    """
+    Build a runtime-protected wrapper around local checker code to hinder analysis.
+    """
+    protection_header = f"# {LoaderConfig.PROTECTED_BANNER}\nimport sys\n\n" \
+                        "def _runtime_protect():\n" \
+                        "    # Basic anti-debugging\n" \
+                        "    if hasattr(sys, 'gettrace') and sys.gettrace() is not None:\n" \
+                        "        print('Debugging detected - terminating')\n" \
+                        "        sys.exit(1)\n" \
+                        "    # Block common analysis modules\n" \
+                        "    for mod in ('pdb','trace','bdb','dis'):\n" \
+                        "        if mod in sys.modules:\n" \
+                        "            print('Analysis module detected - terminating')\n" \
+                        "            sys.exit(1)\n" \
+                        "_runtime_protect()\n\n"
+    return protection_header + original_code
+
+def protect_and_execute_local(local_path: str, security_engine: "SecurityEngine"):
+    """
+    Read a local checker, wrap it with protection, write to temp, and execute securely.
+    """
+    os.makedirs(LoaderConfig.TEMP_DIR, exist_ok=True)
+    if not os.path.exists(local_path):
+        print_status(f"Local checker not found: {local_path}", "error")
+        sys.exit(1)
+    if not verify_local_integrity(local_path):
+        print_status("Local file failed integrity check - aborting", "error")
+        sys.exit(1)
+
+    try:
+        with open(local_path, "r", encoding="utf-8") as f:
+            original = f.read()
+        if len(original <) 500:
+            print_status("Local checker content appears incomplete - abortne):
     print_status("Initiating secure download protocol...", "security")    
     os.makedirs(LoaderConfig.TEMP_DIR, exist_ok=True)
     local_checker_path = os.path.join(LoaderConfig.TEMP_DIR, LoaderConfig.CHECKER_FILE)
