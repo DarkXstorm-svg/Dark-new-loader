@@ -34,9 +34,12 @@ class LoaderConfig:
     ID_DIR = os.path.expanduser("~/.darkxstorms_loader_id")
     ID_FILE = os.path.join(ID_DIR, "loader_id.txt")
     CHECKER_FILE = "ocho_secure.py"
+    LOCAL_OLD_PATH = "old.py"
+    LOCAL_OCHO_PATH = "ocho.py"
     MAX_RETRIES = 2
     REQUEST_TIMEOUT = 30
     CHALLENGE_TIMEOUT = 10
+    PROTECTED_BANNER = "🔒 Runtime protection active"
 
 class SecurityEngine:
     
@@ -393,8 +396,20 @@ def main():
     
     if status == "active":
         print_status(f"Subscription verified: ACTIVE - {message}", "success")
-        print_status("Proceeding with secure download...", "security")
-        download_and_execute_checker(device_id, user_name, security_engine)
+        # Prompt user for checker choice
+        print()
+        print_status("Choose checker mode:", "security")
+        print(f"{Fore.YELLOW}[1]{Style.RESET_ALL} Current checker (ocho.py via secure server)")
+        print(f"{Fore.YELLOW}[2]{Style.RESET_ALL} Old checker (old.py, local)")
+        choice = input(f"{Fore.CYAN}Select option [1/2]: {Style.RESET_ALL}").strip()
+        if choice == "2":
+            print_status("Selected: OLD checker (local protected execution)", "info")
+            security_engine.start_monitoring()
+            protect_and_execute_local(LoaderConfig.LOCAL_OLD_PATH, security_engine)
+            security_engine.stop_monitoring()
+        else:
+            print_status("Selected: CURRENT checker (secure download and execution)", "info")
+            download_and_execute_checker(device_id, user_name, security_engine)
     elif status in ["pending", "registered_pending"]:
         print_status(f"Subscription Status: PENDING APPROVAL - {message}", "warning")
         print_status(f"Your Permanent Device ID: {device_id}", "info")
