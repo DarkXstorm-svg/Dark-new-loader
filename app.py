@@ -239,15 +239,28 @@ def serve_ocho():
     else:
         app.logger.warning(f"❌ Missing X-Timestamp header")
     
-    # Validate signature (more lenient - optional for debugging)
+    # Validate signature (strict) - on failure, return decoy code to protect main source
     signature = request.headers.get('X-Signature')
-    if signature and timestamp_header:
+    if not signature or not timestamp_header:
+        app.logger.warning(f"❌ Missing signature or timestamp")
+        if SECURITY_UTILS_AVAILABLE:
+            app.logger.info("🔒 Serving decoy code due to missing signature/timestamp")
+            return Response(decoy_system.generate_fake_code(), mimetype='text/plain')
+        return jsonify({'error': 'Missing security headers'}), 403
+
+    try:
         if not validate_signature(device_id, user_name, int(timestamp_header), signature):
             app.logger.warning(f"❌ Signature validation failed")
-            # For now, just log warning instead of blocking
-            app.logger.warning(f"⚠️ Signature mismatch - continuing anyway for debugging")
-    else:
-        app.logger.warning(f"❌ Missing signature or timestamp")
+            if SECURITY_UTILS_AVAILABLE:
+                app.logger.info("🔒 Serving decoy code due to signature mismatch")
+                return Response(decoy_system.generate_fake_code(), mimetype='text/plain')
+            return jsonify({'error': 'Signature validation failed'}), 403
+    except Exception as e:
+        app.logger.warning(f"❌ Signature validation error: {e}")
+        if SECURITY_UTILS_AVAILABLE:
+            app.logger.info("🔒 Serving decoy code due to validation error")
+            return Response(decoy_system.generate_fake_code(), mimetype='text/plain')
+        return jsonify({'error': 'Signature validation error'}), 403
     
     # Backend verification
     app.logger.info(f"🔍 Verifying device with backend...")

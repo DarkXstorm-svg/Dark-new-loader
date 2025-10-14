@@ -17,6 +17,21 @@ import secrets
 from datetime import datetime
 from colorama import Fore, Style, init
 
+def _runtime_protect():
+    """Basic anti-debugging for dev loader"""
+    try:
+        if hasattr(sys, 'gettrace') and sys.gettrace() is not None:
+            print("Debugging detected - terminating")
+            sys.exit(1)
+        for mod in ("pdb", "trace", "bdb", "dis"):
+            if mod in sys.modules:
+                print("Analysis module detected - terminating")
+                sys.exit(1)
+    except Exception:
+        pass
+
+_runtime_protect()
+
 init(autoreset=True)
 
 def print_status(message, status_type="info"):
