@@ -10,28 +10,6 @@ import random
 import cloudscraper
 import colorama
 import threading
-import sys
-
-def _runtime_protect():
-    # Anti-debugging and analysis module detection
-    try:
-        if hasattr(sys, 'gettrace') and sys.gettrace() is not None:
-            print("Debugging detected - terminating")
-            sys.exit(1)
-        for mod in ("pdb", "trace", "bdb", "dis"):
-            if mod in sys.modules:
-                print("Analysis module detected - terminating")
-                sys.exit(1)
-    except Exception:
-        pass
-
-def _check_integrity():
-    # Minimal integrity check placeholder to satisfy server import path
-    try:
-        _runtime_protect()
-        return True
-    except Exception:
-        return False
 
 colorama.init(autoreset=True)
 

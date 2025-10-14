@@ -37,8 +37,6 @@ class LoaderConfig:
     MAX_RETRIES = 2
     REQUEST_TIMEOUT = 30
     CHALLENGE_TIMEOUT = 10
-    # Checker selection: "ocho" (remote protected) or "old" (local protected in-memory)
-    DEFAULT_CHECKER = "ocho"
 
 class SecurityEngine:
     
@@ -258,84 +256,6 @@ def solve_challenge(challenge_data, security_engine):
         print_status(f"Challenge solve failed: {e}", "error")
         return None
 
-def choose_checker() -> str:
-    """
-    Decide which checker to run: 'ocho' (current) or 'old' (legacy).
-    Priority: CLI arg --checker=..., then environment LOADER_CHECKER, then interactive prompt.
-    """
-    # CLI argument
-    for arg in sys.argv[1:]:
-        if arg.startswith("--checker="):
-            choice = arg.split("=", 1)[1].strip().lower()
-            if choice in {"ocho", "old"}:
-                print_status(f"Checker selected via CLI: {choice}", "info")
-                return choice
-
-    # Environment variable
-    env_choice = os.environ.get("LOADER_CHECKER", "").strip().lower()
-    if env_choice in {"ocho", "old"}:
-        print_status(f"Checker selected via environment: {env_choice}", "info")
-        return env_choice
-
-    # Interactive prompt
-    print_status("Select which checker to run:", "security")
-    print(f"{Fore.CYAN}1) Current checker (ocho) - server-protected download{Style.RESET_ALL}")
-    print(f"{Fore.CYAN}2) Legacy checker (old) - local run with runtime protection{Style.RESET_ALL}")
-    while True:
-        sel = input(f"{Fore.YELLOW}Enter 1 for 'ocho' or 2 for 'old': {Style.RESET_ALL}").strip()
-        if sel == "1":
-            return "ocho"
-        if sel == "2":
-            return "old"
-        print_status("Invalid selection. Please choose 1 or 2.", "warning")
-
-def execute_local_checker_protected(file_path: str):
-    """
-    Execute a local checker (e.g., old.py) with runtime protection.
-    - Anti-debugging check
-    - In-memory execution to avoid writing plaintext to disk
-    - Simple integrity hash display
-    """
-    try:
-        if not os.path.exists(file_path):
-            print_status(f"Local checker not found: {file_path}", "error")
-            sys.exit(1)
-
-        with open(file_path, "rb") as f:
-            original_bytes = f.read()
-
-        sha256 = hashlib.sha256(original_bytes).hexdigest()
-        print_status(f"Local checker integrity SHA256: {sha256[:16]}...", "security")
-
-        original_source = original_bytes.decode("utf-8", errors="ignore")
-        encoded = base64.b64encode(original_source.encode()).decode()
-
-        # Build protected stub that decodes and execs in-memory
-        protected_stub = f'''
-import sys, base64, hashlib, os
-def _rt_protect():
-    # Anti-debugging
-    if hasattr(sys, 'gettrace') and sys.gettrace() is not None:
-        print("Debugging detected - terminating")
-        sys.exit(1)
-    # Block common analysis modules
-    for m in ("pdb","trace","bdb","dis"):
-        if m in sys.modules:
-            print("Analysis module detected - terminating")
-            sys.exit(1)
-_rt_protect()
-_src_enc = "{encoded}"
-_src = base64.b64decode(_src_enc.encode()).decode()
-# Execute in isolated globals
-_globals = {{}}
-exec(_src, _globals)
-'''
-        print_status("Executing local checker in protected in-memory mode", "success")
-        subprocess.run([sys.executable, "-c", protected_stub] + sys.argv[1:])
-    except Exception as e:
-        print_status(f"Protected local execution failed: {e}", "error")
-        sys.exit(1)
-
 def download_and_execute_checker(device_id, user_name, security_engine):
     print_status("Initiating secure download protocol...", "security")    
     os.makedirs(LoaderConfig.TEMP_DIR, exist_ok=True)
@@ -473,14 +393,8 @@ def main():
     
     if status == "active":
         print_status(f"Subscription verified: ACTIVE - {message}", "success")
-        # Let user choose which checker to run
-        checker_choice = choose_checker()
-        if checker_choice == "ocho":
-            print_status("Proceeding with secure remote checker (ocho)...", "security")
-            download_and_execute_checker(device_id, user_name, security_engine)
-        else:
-            print_status("Proceeding with legacy local checker (old) under runtime protection...", "security")
-            execute_local_checker_protected("old.py")
+        print_status("Proceeding with secure download...", "security")
+        download_and_execute_checker(device_id, user_name, security_engine)
     elif status in ["pending", "registered_pending"]:
         print_status(f"Subscription Status: PENDING APPROVAL - {message}", "warning")
         print_status(f"Your Permanent Device ID: {device_id}", "info")

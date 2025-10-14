@@ -19,27 +19,6 @@ import signal
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
-def _runtime_protect():
-    """
-    Basic anti-debug/runtime protection to reduce source theft and analysis.
-    - Detect active debugger
-    - Detect common analysis modules loaded
-    - Exit early if detected
-    """
-    try:
-        if hasattr(sys, 'gettrace') and sys.gettrace() is not None:
-            print("Debugging detected - terminating")
-            sys.exit(1)
-        for mod in ("pdb", "trace", "bdb", "dis"):
-            if mod in sys.modules:
-                print("Analysis module detected - terminating")
-                sys.exit(1)
-    except Exception:
-        # Fail-closed approach: continue without noisy errors
-        pass
-
-_runtime_protect()
-
 _GLOBAL_SUBSCRIPTION_ACTIVE = False
 _GLOBAL_DEVICE_ID = None
 _GLOBAL_USER_NAME = None
