@@ -5,3 +5,4 @@ cloudscraper==1.2.71
 pycryptodome==3.20.0
 urllib3==2.2.3
 psutil==5.9.8
+cryptography
